@@ -35,15 +35,18 @@ int main() {
         vector<Command> commands = parse(tokens);
 
         // execute
-        if(commands.size() == 1){
-            // first check if its a builtin
-            bool wasBuiltin = runBuiltin(commands[0]);
-
-            // if not a builtin → fork and execute
-            if(!wasBuiltin){
-                executeCommand(commands[0]);
-            }
-        }
+         // execute
+     if(commands.size() == 1) {
+    // single command
+    bool wasBuiltin = runBuiltin(commands[0]);
+    if(!wasBuiltin) {
+        executeCommand(commands[0]);
+    }
+   }
+     else if(commands.size() > 1) {
+    // pipeline of commands
+    executePipeline(commands);
+   }
     }
 
     return 0;
