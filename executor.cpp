@@ -4,23 +4,77 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <array>
+#include <signal.h>     // ← add this for SIG_DFL
 using namespace std;
 
 void executeCommand(Command cmd) {
-    // ... your existing code stays exactly the same
+
+    // build args array for execvp
+    vector<char*> args;
+    args.push_back((char*)cmd.program.c_str());
+    for(int i = 0; i < cmd.args.size(); i++) {
+        args.push_back((char*)cmd.args[i].c_str());
+    }
+    args.push_back(NULL);
+
+    int pid = fork();
+
+    if(pid == 0) {
+        // ---- CHILD PROCESS ----
+
+        // reset signal to default so Ctrl+C kills child
+        signal(SIGINT, SIG_DFL);   // ← new line
+
+        // handle output redirection
+        if(!cmd.outputFile.empty()) {
+            int flags;
+            if(cmd.appendOutput) {
+                flags = O_WRONLY | O_CREAT | O_APPEND;
+            }
+            else {
+                flags = O_WRONLY | O_CREAT | O_TRUNC;
+            }
+            int fd = open(cmd.outputFile.c_str(), flags, 0644);
+            if(fd < 0) {
+                cout << "cannot open file: " << cmd.outputFile << "\n";
+                exit(1);
+            }
+            dup2(fd, 1);
+            close(fd);
+        }
+
+        // handle input redirection
+        if(!cmd.inputFile.empty()) {
+            int fd = open(cmd.inputFile.c_str(), O_RDONLY);
+            if(fd < 0) {
+                cout << "cannot open file: " << cmd.inputFile << "\n";
+                exit(1);
+            }
+            dup2(fd, 0);
+            close(fd);
+        }
+
+        // run the program
+        execvp(args[0], args.data());
+        cout << cmd.program << ": command not found\n";
+        exit(1);
+    }
+    else if(pid > 0) {
+        // ---- PARENT PROCESS ----
+        int status;
+        waitpid(pid, &status, 0);
+    }
+    else {
+        cout << "fork failed\n";
+    }
 }
 
 void executePipeline(vector<Command> commands) {
 
-    // total commands
     int n = commands.size();
-
-    // we need n-1 pipes
-    // each pipe has 2 file descriptors [read, write]
-    // so we make a 2D array
     vector<array<int, 2>> pipes(n - 1);
 
-    // create all pipes first
     for(int i = 0; i < n - 1; i++) {
         if(pipe(pipes[i].data()) < 0) {
             cout << "pipe creation failed\n";
@@ -28,10 +82,8 @@ void executePipeline(vector<Command> commands) {
         }
     }
 
-    // store all child pids so parent can wait for them
     vector<int> pids;
 
-    // fork a child for each command
     for(int i = 0; i < n; i++) {
 
         int pid = fork();
@@ -39,26 +91,22 @@ void executePipeline(vector<Command> commands) {
         if(pid == 0) {
             // ---- CHILD PROCESS ----
 
-            // if NOT the first command
-            // read input from previous pipe
+            // reset signal to default
+            signal(SIGINT, SIG_DFL);   // ← new line
+
             if(i > 0) {
-                dup2(pipes[i-1][0], 0);  // stdin = read end of previous pipe
+                dup2(pipes[i-1][0], 0);
             }
 
-            // if NOT the last command
-            // write output to current pipe
             if(i < n - 1) {
-                dup2(pipes[i][1], 1);    // stdout = write end of current pipe
+                dup2(pipes[i][1], 1);
             }
 
-            // close ALL pipe ends in child
-            // child only needs the ones it dup2'd
             for(int j = 0; j < n - 1; j++) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
             }
 
-            // handle redirections if any
             if(!commands[i].outputFile.empty()) {
                 int flags = commands[i].appendOutput
                     ? O_WRONLY | O_CREAT | O_APPEND
@@ -74,7 +122,6 @@ void executePipeline(vector<Command> commands) {
                 close(fd);
             }
 
-            // build args and execute
             vector<char*> args;
             args.push_back((char*)commands[i].program.c_str());
             for(int j = 0; j < commands[i].args.size(); j++) {
@@ -87,8 +134,7 @@ void executePipeline(vector<Command> commands) {
             exit(1);
         }
         else if(pid > 0) {
-            // ---- PARENT PROCESS ----
-            pids.push_back(pid);  // save child pid
+            pids.push_back(pid);
         }
         else {
             cout << "fork failed\n";
@@ -96,14 +142,11 @@ void executePipeline(vector<Command> commands) {
         }
     }
 
-    // parent closes ALL pipe ends
-    // very important! otherwise shell hangs forever
     for(int i = 0; i < n - 1; i++) {
         close(pipes[i][0]);
         close(pipes[i][1]);
     }
 
-    // wait for ALL children to finish
     for(int i = 0; i < pids.size(); i++) {
         int status;
         waitpid(pids[i], &status, 0);
