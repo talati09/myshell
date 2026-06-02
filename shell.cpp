@@ -11,8 +11,11 @@ using namespace std;
 // this function runs when Ctrl+C is pressed
 // and no command is running
 void handleSIGINT(int sig) {
-    cout << "\nmysh> ";
+    char cwd[1024];
+    getcwd(cwd, sizeof(cwd));
+    cout << "\nmysh:" << cwd << "> ";
     flush(cout);
+    signal(SIGINT, handleSIGINT);
 }
 
 int main() {
@@ -28,8 +31,14 @@ int main() {
         flush(cout);
 
         if(!getline(cin, input)) {
-            cout << "\nexit\n";
-            break;
+             if(cin.eof()) {
+        // Ctrl+D pressed → actually exit
+        cout << "\nexit\n";
+        break;
+    }
+    // signal interrupted getline → just continue loop
+    cin.clear();
+    continue;
         }
 
         if(input.empty()) continue;
