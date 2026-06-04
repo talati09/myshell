@@ -1,15 +1,14 @@
 #include <iostream>
 #include <string>
 #include <unistd.h>
-#include <signal.h>        // ← add this for signals
+#include <signal.h>
 #include "tokenizer.h"
 #include "parser.h"
 #include "builtins.h"
 #include "executor.h"
+#include "history.h"       // ← add this
 using namespace std;
 
-// this function runs when Ctrl+C is pressed
-// and no command is running
 void handleSIGINT(int sig) {
     char cwd[1024];
     getcwd(cwd, sizeof(cwd));
@@ -20,8 +19,8 @@ void handleSIGINT(int sig) {
 
 int main() {
     string input;
+    vector<string> history;    // ← add this
 
-    // tell shell to call handleSIGINT when Ctrl+C pressed
     signal(SIGINT, handleSIGINT);
 
     while(true) {
@@ -30,16 +29,8 @@ int main() {
         cout << "mysh:" << cwd << "> ";
         flush(cout);
 
-        if(!getline(cin, input)) {
-             if(cin.eof()) {
-        // Ctrl+D pressed → actually exit
-        cout << "\nexit\n";
-        break;
-    }
-    // signal interrupted getline → just continue loop
-    cin.clear();
-    continue;
-        }
+        // use readInput instead of getline
+        input = readInput(history);    // ← replace getline with this
 
         if(input.empty()) continue;
 
@@ -48,28 +39,23 @@ int main() {
             break;
         }
 
+        // add to history
+        history.push_back(input);     // ← add this
+
         vector<Token> tokens = tokenize(input);
         vector<Command> commands = parse(tokens);
 
         if(commands.size() == 1) {
             bool wasBuiltin = runBuiltin(commands[0]);
             if(!wasBuiltin) {
-                // ignore SIGINT in parent while child runs
                 signal(SIGINT, SIG_IGN);
-
                 executeCommand(commands[0]);
-
-                // restore handler after child finishes
                 signal(SIGINT, handleSIGINT);
             }
         }
         else if(commands.size() > 1) {
-            // ignore SIGINT in parent while pipeline runs
             signal(SIGINT, SIG_IGN);
-
             executePipeline(commands);
-
-            // restore handler after pipeline finishes
             signal(SIGINT, handleSIGINT);
         }
     }
