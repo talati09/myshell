@@ -7,8 +7,11 @@ using namespace std;
 
 // token types
 enum TokenType {
-    WORD,
+     WORD,
     PIPE,
+    REDIR_OUT,     // >
+    REDIR_IN,      // 
+    REDIR_APPEND,  // >>
     END
 };
 

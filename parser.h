@@ -9,6 +9,9 @@ using namespace std;
 struct Command {
     string program;
     vector<string> args;
+    string inputFile;    // for <   (empty if none)
+    string outputFile;   // for >   (empty if none)
+    bool appendOutput;   // true if >> false if >
 };
 
 // declaration

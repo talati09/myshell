@@ -20,9 +20,38 @@ vector<Token> tokenize(string input) {
             i++;
             continue;
         }
+        
+          // >> append (check BEFORE > so we dont miss it)
+         if(input[i] == '>' && i+1 < input.length() && input[i+1] == '>') {
+            Token t;
+            t.type = REDIR_APPEND;
+            t.value = ">>";
+            tokens.push_back(t);
+            i += 2;  // skip both > characters
+            continue;
+        }
+            // > output redirect
+           if(input[i] == '>') {
+            Token t;
+            t.type = REDIR_OUT;
+            t.value = ">";
+            tokens.push_back(t);
+            i++;
+            continue;
+        }
+        //input redirect
+         if(input[i] == '<') {
+            Token t;
+            t.type = REDIR_IN;
+            t.value = "<";
+            tokens.push_back(t);
+            i++;
+            continue;
+        }
+
 
         string word = "";
-        while(i < input.length() && input[i] != ' ' && input[i] != '|') {
+        while(i < input.length() && input[i] != ' ' && input[i] != '|'&&input[i]!='<'&&input[i]!='>') {
             word += input[i];
             i++;
         }
